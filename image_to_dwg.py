@@ -213,22 +213,31 @@ class ImageToDwgConverter:
         min_length = config.get('min_len', 25)
         epsilon = config.get('epsilon', 1.5)
         
+        # Edge-aware smoothing params
+        smooth_window = config.get('smooth_window', 5)
+        snap_radius = int(config.get('snap_radius', 3))
+        corner_angle = float(config.get('corner_preserve_angle_deg', 35.0))
+        max_offset = float(config.get('max_smooth_offset', 2.5))
+        epsilon_after = float(config.get('epsilon_after_smooth', epsilon))
+        
         # Find contours
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # Filter contours by minimum length and apply smoothing
+        # Filter contours by minimum length and apply edge-aware smoothing
         smoothed_contours = []
         for contour in contours:
             if len(contour) >= min_length:
-                # Convert contour to a more detailed representation for smoothing
-                contour_detailed = cv2.approxPolyDP(contour, 0.1, True)
-                
-                # Apply smoothing using moving average
-                smooth_window = config.get('smooth_window', 5)
-                smoothed_points = self._smooth_contour(contour_detailed, smooth_window)
+                # Use original contour for edge-aware smoothing
+                smoothed_points = self._edge_aware_smooth_contour(
+                    contour, edges,
+                    window_size=smooth_window,
+                    snap_radius=snap_radius,
+                    corner_angle_deg=corner_angle,
+                    max_offset=max_offset
+                )
                 
                 # Final simplification using Ramer-Douglas-Peucker algorithm
-                simplified = cv2.approxPolyDP(smoothed_points, epsilon, True)
+                simplified = cv2.approxPolyDP(smoothed_points, epsilon_after, True)
                 
                 # Only keep contours that still have enough points after smoothing
                 if len(simplified) >= 3:
@@ -370,6 +379,102 @@ class ImageToDwgConverter:
         smoothed = np.convolve(padded, kernel, mode='valid')
         
         return smoothed
+
+    def _edge_aware_smooth_contour(self, contour: np.ndarray, edges: np.ndarray,
+                                   window_size: int = 5, snap_radius: int = 3,
+                                   corner_angle_deg: float = 35.0,
+                                   max_offset: float = 2.5) -> np.ndarray:
+        """
+        Edge-aware smoothing: reduce micro-squiggles while preserving edges.
+        - Smooth points using moving average
+        - Preserve sharp corners (angle below threshold)
+        - Snap smoothed points to nearby edge pixels (via distance transform) within snap_radius
+        - Limit displacement from original points to max_offset
+        Returns an (N,1,2) int32 contour.
+        """
+        if contour is None or len(contour) < 3:
+            return contour
+        pts = contour.reshape(-1, 2).astype(np.float32)
+        N = len(pts)
+        if N < 3:
+            return contour
+        
+        # Detect if closed contour
+        closed = np.linalg.norm(pts[0] - pts[-1]) < 1.0
+        
+        # Compute angles to preserve corners
+        def angle(a, b, c):
+            v1 = a - b
+            v2 = c - b
+            n1 = np.linalg.norm(v1) + 1e-6
+            n2 = np.linalg.norm(v2) + 1e-6
+            cosang = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
+            return np.degrees(np.arccos(cosang))
+        
+        preserve = np.zeros(N, dtype=bool)
+        for i in range(N):
+            i_prev = (i - 1) % N if closed else max(0, i - 1)
+            i_next = (i + 1) % N if closed else min(N - 1, i + 1)
+            ang = angle(pts[i_prev], pts[i], pts[i_next])
+            if ang < corner_angle_deg:
+                preserve[i] = True
+        
+        # Smooth x and y independently
+        xs = self._moving_average(pts[:, 0], window_size)
+        ys = self._moving_average(pts[:, 1], window_size)
+        smoothed = np.stack([xs, ys], axis=1)
+        
+        # Restore preserved corners
+        smoothed[preserve] = pts[preserve]
+        
+        # Build distance transform for snapping to nearest edge pixels
+        # distanceTransform expects non-zero as foreground; we want distance to edges (zeros),
+        # so invert edges: background=255, edges=0
+        inv = np.where(edges > 0, 0, 255).astype(np.uint8)
+        dt = cv2.distanceTransform(inv, cv2.DIST_L2, 3)
+        h, w = dt.shape
+        
+        # Helper to clamp within image
+        def clamp_xy(xy):
+            x, y = xy
+            x = min(max(int(round(x)), 0), w - 1)
+            y = min(max(int(round(y)), 0), h - 1)
+            return x, y
+        
+        out = smoothed.copy()
+        R = max(1, int(snap_radius))
+        for i in range(N):
+            if preserve[i]:
+                continue
+            orig = pts[i]
+            cand = smoothed[i]
+            # Limit displacement
+            disp = cand - orig
+            d = np.linalg.norm(disp)
+            if d > max_offset:
+                cand = orig + disp * (max_offset / (d + 1e-6))
+            # Snap to nearest edge pixel within radius if that reduces distance
+            cx, cy = clamp_xy(cand)
+            best = np.array([cx, cy], dtype=np.int32)
+            best_dt = dt[cy, cx]
+            if best_dt > 0:
+                y0 = max(0, cy - R)
+                y1 = min(h - 1, cy + R)
+                x0 = max(0, cx - R)
+                x1 = min(w - 1, cx + R)
+                region = dt[y0:y1+1, x0:x1+1]
+                min_idx = np.unravel_index(np.argmin(region), region.shape)
+                ny = y0 + min_idx[0]
+                nx = x0 + min_idx[1]
+                if region[min_idx] < best_dt:
+                    best = np.array([nx, ny], dtype=np.int32)
+            out[i] = best.astype(np.float32)
+        
+        # Ensure closed if original was closed
+        if closed:
+            out[-1] = out[0]
+        
+        return out.reshape(-1, 1, 2).astype(np.int32)
     
     def _create_dwg(self, contours: List[np.ndarray], output_path: str, 
                    width: int, height: int) -> None:
