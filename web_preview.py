@@ -88,31 +88,59 @@ def image_to_base64(image, format='PNG'):
     return f"data:image/{format.lower()};base64,{encoded}"
 
 def create_contour_visualization(image, contours):
-    """Create a visualization of contours overlaid on the original image"""
-    if image is None or contours is None or len(contours) == 0:
+    """Create a visualization of contours overlaid on the original image.
+    Robust to empty/invalid contours and shapes. Returns None if nothing to draw.
+    """
+    if image is None or contours is None:
         return None
-    
+
+    # Normalize to list
+    try:
+        contour_list = list(contours)
+    except Exception:
+        return None
+
+    # Filter and normalize contours to proper shape and dtype
+    valid_contours = []
+    for c in contour_list:
+        if c is None:
+            continue
+        c = np.asarray(c)
+        # Accept (N,1,2) or (N,2); attempt to reshape flattened pairs
+        if c.ndim == 3 and c.shape[1] == 1 and c.shape[2] == 2:
+            pass  # already (N,1,2)
+        elif c.ndim == 2 and c.shape[1] == 2:
+            c = c.reshape((-1, 1, 2))
+        else:
+            # Try to coerce if data length is even
+            if c.size % 2 == 0:
+                try:
+                    c = c.reshape((-1, 1, 2))
+                except Exception:
+                    continue
+            else:
+                continue
+        if c.shape[0] > 0:
+            valid_contours.append(c.astype(np.int32))
+
+    if len(valid_contours) == 0:
+        return None
+
     contour_image = image.copy()
-    
+
     # Find primary contour (largest area)
-    primary_contour = None
-    max_area = 0
-    
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area > max_area:
-            max_area = area
-            primary_contour = contour
-    
+    areas = [cv2.contourArea(c) for c in valid_contours]
+    primary_idx = int(np.argmax(areas)) if len(areas) > 0 else -1
+
     # Draw detail contours in white
-    for contour in contours:
-        if not np.array_equal(contour, primary_contour):
-            cv2.drawContours(contour_image, [contour], -1, (255, 255, 255), 2)
-    
+    for idx, c in enumerate(valid_contours):
+        if idx != primary_idx:
+            cv2.drawContours(contour_image, [c], -1, (255, 255, 255), 2)
+
     # Draw primary contour in red
-    if primary_contour is not None:
-        cv2.drawContours(contour_image, [primary_contour], -1, (0, 0, 255), 3)
-    
+    if primary_idx >= 0:
+        cv2.drawContours(contour_image, [valid_contours[primary_idx]], -1, (0, 0, 255), 3)
+
     return contour_image
 
 def calculate_stats():
