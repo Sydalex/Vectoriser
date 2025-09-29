@@ -77,7 +77,7 @@ class AdvancedMaskingSystem:
     
     def __init__(self):
         self.deeplab_model = None
-        self.current_method = MaskingMethod.WATERSHED
+        self.current_method = MaskingMethod.GRABCUT
         self.mask_cache = {}
         
     # ---- Transparency and checkerboard preprocessing ----
@@ -226,9 +226,9 @@ class AdvancedMaskingSystem:
         
         return mask
     
-    def grabcut_mask(self, image: np.ndarray, iterations: int = 5, margin_ratio: float = 0.01) -> np.ndarray:
+    def grabcut_mask(self, image: np.ndarray, iterations: int = 7, margin_ratio: float = 0.0) -> np.ndarray:
         """GrabCut algorithm for foreground extraction with near-full-image initialization.
-        margin_ratio controls the border margin (default 1% per side).
+        margin_ratio controls the border margin (default 0% per side to consider full image).
         """
         h, w = image.shape[:2]
         

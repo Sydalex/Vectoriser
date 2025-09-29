@@ -57,6 +57,10 @@ current_state = {
     'masking_options': {
         'cohesion_enabled': True,
         'cohesion_strength': 5
+    },
+    'grabcut_options': {
+        'iterations': 7,
+        'margin_ratio': 0.0
     }
 }
 
@@ -617,31 +621,30 @@ def set_cad_profile():
 
 @app.route('/masking_methods')
 def get_masking_methods():
-    """Get available masking methods"""
-    masking_system = current_state['masking_system']
-    methods = masking_system.get_available_methods()
-    current_method = masking_system.current_method.value
-    
+    """Get available masking methods (limited to GrabCut)"""
     return jsonify({
-        'methods': methods,
-        'current': current_method
+        'methods': ['grabcut'],
+        'current': 'grabcut'
     })
 
 @app.route('/set_masking_method', methods=['POST'])
 def set_masking_method():
-    """Set the active masking method"""
-    data = request.json
-    if not data or 'method' not in data:
-        return jsonify({'error': 'Method name required'}), 400
-    
+    """Set the active masking method (GrabCut only) and regenerate mask"""
+    data = request.json or {}
     try:
         masking_system = current_state['masking_system']
-        method = MaskingMethod(data['method'])
-        masking_system.set_method(method)
+        # Force GrabCut as current method
+        masking_system.set_method(MaskingMethod.GRABCUT)
         
-        # Regenerate mask with new method if we have an image
+        # Regenerate mask with GrabCut if we have an image
         if current_state['image'] is not None:
-            mask_result = masking_system.generate_mask(current_state['image'])
+            gc = current_state.get('grabcut_options', {'iterations': 7, 'margin_ratio': 0.0})
+            mask_result = masking_system.generate_mask(
+                current_state['image'],
+                MaskingMethod.GRABCUT,
+                iterations=int(gc.get('iterations', 7)),
+                margin_ratio=float(gc.get('margin_ratio', 0.0))
+            )
             current_state['mask'] = mask_result['mask']
             current_state['mask_result'] = mask_result
             
@@ -719,6 +722,29 @@ def set_masking_options():
     if dms and hasattr(dms, 'set_options'):
         dms.set_options(opts)
     return jsonify({'message': 'Masking options updated', 'options': opts})
+
+@app.route('/grabcut_options')
+def get_grabcut_options():
+    return jsonify(current_state.get('grabcut_options', {'iterations': 7, 'margin_ratio': 0.0}))
+
+@app.route('/set_grabcut_options', methods=['POST'])
+def set_grabcut_options():
+    data = request.json or {}
+    opts = current_state.get('grabcut_options', {})
+    if 'iterations' in data:
+        try:
+            it = int(data['iterations'])
+            opts['iterations'] = max(1, min(20, it))
+        except Exception:
+            pass
+    if 'margin_ratio' in data:
+        try:
+            mr = float(data['margin_ratio'])
+            opts['margin_ratio'] = max(0.0, min(0.2, mr))
+        except Exception:
+            pass
+    current_state['grabcut_options'] = opts
+    return jsonify({'message': 'GrabCut options updated', 'options': opts})
 
 @app.route('/detailed_masking_methods')
 def get_detailed_masking_methods():
@@ -1114,26 +1140,20 @@ if __name__ == '__main__':
             </div>
             
             <div class="section">
-                <h3>🎭 Masking Method</h3>
-                <label style="font-size:12px;color:#666;display:block;margin-bottom:6px;">Recommended</label>
-                <select id="maskingMethodSimple" onchange="setMaskingMethod()">
-                    <option value="watershed">🌊 Watershed (Recommended)</option>
-                </select>
-                <div class="checkbox-group" style="margin-top:8px;">
-                    <input type="checkbox" id="maskingExpertToggle" onchange="toggleExpertMasking()">
-                    <label for="maskingExpertToggle" style="margin-bottom:0;">Show expert methods</label>
+                <h3>🎭 Masking (GrabCut)</h3>
+                <div class="param-group">
+                    <label>Iterations</label>
+                    <input type="range" id="grabcutIterations" min="1" max="20" value="7" oninput="document.getElementById('grabcutIterationsValue').textContent=this.value">
+                    <div class="param-value" id="grabcutIterationsValue">7</div>
                 </div>
-                <div id="maskingExpertPanel" style="display:none;margin-top:8px;">
-                    <label style="font-size:12px;color:#666;display:block;margin-bottom:6px;">Expert methods</label>
-                    <select id="maskingMethodExpert" onchange="setMaskingMethod()">
-                        <option value="watershed">🌊 Watershed</option>
-                        <option value="semantic_deeplab">🧠 AI Segmentation</option>
-                        <option value="edge_based">✂️ Edge Detection</option>
-                        <option value="adaptive_threshold">🌅 Adaptive Threshold</option>
-                        <option value="grabcut">✂️ GrabCut</option>
-                        <option value="kmeans_clustering">🎨 K-Means</option>
-                        <option value="combined">✨ Smart Combined</option>
-                    </select>
+                <div class="param-group">
+                    <label>Margin (%)</label>
+                    <input type="range" id="grabcutMargin" min="0" max="5" step="0.5" value="0" oninput="document.getElementById('grabcutMarginValue').textContent=this.value + '%';">
+                    <div class="param-value" id="grabcutMarginValue">0%</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="updateGrabcutOptions()" style="background:#6c757d;">Update GrabCut Settings</button>
+                    <button onclick="setMaskingMethod()" style="background:#007AFF;">Apply Masking</button>
                 </div>
                 <div id="maskQuality" class="mask-quality" style="margin-top:8px;"></div>
             </div>
@@ -1239,6 +1259,7 @@ if __name__ == '__main__':
             updateParamValue('minLen');
             updateParamValue('epsilon');
             loadCohesionOptions();
+            loadGrabcutOptions();
             // Set default detailed method to depth_texture_fusion
             const dmSel = document.getElementById('detailedMaskingMethod');
             if (dmSel) dmSel.value = 'depth_texture_fusion';
@@ -1434,13 +1455,45 @@ if __name__ == '__main__':
             });
         }
         
-        function toggleExpertMasking() {
+        function loadGrabcutOptions() {
+            fetch('/grabcut_options')
+            .then(r => r.json())
+            .then(opts => {
+                const it = parseInt(opts.iterations || 7);
+                document.getElementById('grabcutIterations').value = it;
+                document.getElementById('grabcutIterationsValue').textContent = it;
+                const mr = Math.round(100 * (opts.margin_ratio || 0));
+                document.getElementById('grabcutMargin').value = (opts.margin_ratio || 0) * 100 / 20 * 20; // ensure number
+                document.getElementById('grabcutMargin').value = (opts.margin_ratio || 0) * 100 / 20; // simplify
+                document.getElementById('grabcutMargin').value = (opts.margin_ratio || 0) * 100; // percent
+                document.getElementById('grabcutMarginValue').textContent = ((opts.margin_ratio || 0) * 100).toFixed(1) + '%';
+            }).catch(() => {});
+        }
+
+        function updateGrabcutOptions() {
+            const it = parseInt(document.getElementById('grabcutIterations').value);
+            const mr = parseFloat(document.getElementById('grabcutMargin').value) / 100.0;
+            return fetch('/set_grabcut_options', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({iterations: it, margin_ratio: mr})
+            }).then(r => r.json()).then(data => {
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus('GrabCut options updated', 'success');
+                }
+                return data;
+            });
+        }
             const panel = document.getElementById('maskingExpertPanel');
             const chk = document.getElementById('maskingExpertToggle');
             panel.style.display = chk.checked ? 'block' : 'none';
         }
 
         function getSelectedMaskingMethod() {
+            return 'grabcut';
+        }
             const expert = document.getElementById('maskingExpertToggle').checked;
             if (expert) {
                 return document.getElementById('maskingMethodExpert').value;
@@ -1450,6 +1503,7 @@ if __name__ == '__main__':
         }
 
         function setMaskingMethod() {
+            updateGrabcutOptions().finally(() => {
             const selectedMethod = getSelectedMaskingMethod();
             
             setStatus('Updating masking method...');
@@ -1476,22 +1530,19 @@ if __name__ == '__main__':
             .catch(error => {
                 setStatus('Masking method update failed: ' + error.message, 'error');
             });
+            });
         }
         
         function loadMaskingMethods() {
-            fetch('/masking_methods')
-            .then(response => response.json())
-            .then(data => {
-                // Default to watershed in simple selector
-                const simple = document.getElementById('maskingMethodSimple');
-                if (simple) simple.value = 'watershed';
-                // If current is not watershed, reveal expert and select it
-                if (data.current && data.current !== 'watershed') {
-                    document.getElementById('maskingExpertToggle').checked = true;
-                    toggleExpertMasking();
-                    const expert = document.getElementById('maskingMethodExpert');
-                    if (expert) expert.value = data.current;
-                }
+            fetch('/grabcut_options')
+            .then(r => r.json())
+            .then(opts => {
+                const it = parseInt(opts.iterations || 7);
+                document.getElementById('grabcutIterations').value = it;
+                document.getElementById('grabcutIterationsValue').textContent = it;
+                const mrp = ((opts.margin_ratio || 0) * 100).toFixed(1);
+                document.getElementById('grabcutMargin').value = mrp;
+                document.getElementById('grabcutMarginValue').textContent = mrp + '%';
             })
             .catch(error => {
                 console.log('Could not load masking methods:', error);
