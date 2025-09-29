@@ -1462,11 +1462,9 @@ if __name__ == '__main__':
                 const it = parseInt(opts.iterations || 7);
                 document.getElementById('grabcutIterations').value = it;
                 document.getElementById('grabcutIterationsValue').textContent = it;
-                const mr = Math.round(100 * (opts.margin_ratio || 0));
-                document.getElementById('grabcutMargin').value = (opts.margin_ratio || 0) * 100 / 20 * 20; // ensure number
-                document.getElementById('grabcutMargin').value = (opts.margin_ratio || 0) * 100 / 20; // simplify
-                document.getElementById('grabcutMargin').value = (opts.margin_ratio || 0) * 100; // percent
-                document.getElementById('grabcutMarginValue').textContent = ((opts.margin_ratio || 0) * 100).toFixed(1) + '%';
+                const mrp = Math.min(5, Math.max(0, (opts.margin_ratio || 0) * 100));
+                document.getElementById('grabcutMargin').value = mrp;
+                document.getElementById('grabcutMarginValue').textContent = mrp.toFixed(1) + '%';
             }).catch(() => {});
         }
 
