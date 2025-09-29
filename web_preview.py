@@ -53,7 +53,11 @@ current_state = {
     'cad_style_manager': CADStyleManager(),
     'styled_contours': None,
     'masking_system': AdvancedMaskingSystem(),
-    'detailed_masking_system': DetailedMaskingSystem()
+    'detailed_masking_system': DetailedMaskingSystem(),
+    'masking_options': {
+        'cohesion_enabled': True,
+        'cohesion_strength': 5
+    }
 }
 
 # Default parameters
@@ -692,6 +696,30 @@ def set_masking_method():
     except Exception as e:
         return jsonify({'error': f'Failed to set masking method: {str(e)}'}), 500
 
+@app.route('/masking_options')
+def get_masking_options():
+    opts = current_state.get('masking_options', {'cohesion_enabled': True, 'cohesion_strength': 5})
+    return jsonify(opts)
+
+@app.route('/set_masking_options', methods=['POST'])
+def set_masking_options():
+    data = request.json or {}
+    opts = current_state.get('masking_options', {})
+    if 'cohesion_enabled' in data:
+        opts['cohesion_enabled'] = bool(data['cohesion_enabled'])
+    if 'cohesion_strength' in data:
+        try:
+            strength = int(data['cohesion_strength'])
+            opts['cohesion_strength'] = max(1, min(10, strength))
+        except Exception:
+            pass
+    current_state['masking_options'] = opts
+    # Push to system immediately if exists
+    dms = current_state.get('detailed_masking_system')
+    if dms and hasattr(dms, 'set_options'):
+        dms.set_options(opts)
+    return jsonify({'message': 'Masking options updated', 'options': opts})
+
 @app.route('/detailed_masking_methods')
 def get_detailed_masking_methods():
     """Get available detailed masking methods"""
@@ -721,6 +749,11 @@ def use_detailed_masking():
     
     try:
         detailed_masking = current_state['detailed_masking_system']
+        
+        # Apply current masking options
+        opts = current_state.get('masking_options', {})
+        if hasattr(detailed_masking, 'set_options'):
+            detailed_masking.set_options(opts)
         
         # Generate detailed mask
         mask_result = detailed_masking.create_detailed_mask(current_state['image'], method)
@@ -1095,8 +1128,20 @@ if __name__ == '__main__':
                     <option value="texture_aware">🧵 Texture Aware</option>
                     <option value="mean_shift">🎨 Mean Shift</option>
                 </select>
-                <button onclick="useDetailedMasking()" style="margin-top: 10px; background: #FF6B35;">🎯 Apply Detailed Masking</button>
-                <div id="detailedMaskResult" class="mask-quality" style="margin-top: 10px;"></div>
+                <div class=\"checkbox-group\" style=\"margin-top:10px;\">
+                    <input type=\"checkbox\" id=\"cohesionEnabled\" checked>
+                    <label for=\"cohesionEnabled\" style=\"margin-bottom:0;\">Object cohesion refinement</label>
+                </div>
+                <div class=\"param-group\" style=\"margin-top:8px;\">
+                    <label>Cohesion strength</label>
+                    <input type=\"range\" id=\"cohesionStrength\" min=\"1\" max=\"10\" value=\"5\" oninput=\"document.getElementById('cohesionStrengthValue').textContent=this.value\">
+                    <div class=\"param-value\" id=\"cohesionStrengthValue\">5</div>
+                </div>
+                <div style=\"display:flex; gap:8px;\">
+                    <button onclick=\"updateCohesionOptions()\" style=\"margin-top: 6px; background:#6c757d;\">Update Cohesion Settings</button>
+                    <button onclick=\"useDetailedMasking()\" style=\"margin-top: 6px; background: #FF6B35;\">🎯 Apply Detailed Masking</button>
+                </div>
+                <div id=\"detailedMaskResult\" class=\"mask-quality\" style=\"margin-top: 10px;\"></div>
             </div>
             
             <div class="section">
@@ -1171,6 +1216,7 @@ if __name__ == '__main__':
             updateParamValue('cannyHigh');
             updateParamValue('minLen');
             updateParamValue('epsilon');
+            loadCohesionOptions();
             
             // Load CAD profiles and masking methods
             loadCadProfiles();
@@ -1427,17 +1473,54 @@ if __name__ == '__main__':
             }
         }
         
+        function loadCohesionOptions() {
+            fetch('/masking_options')
+              .then(r => r.json())
+              .then(opts => {
+                document.getElementById('cohesionEnabled').checked = !!opts.cohesion_enabled;
+                const s = parseInt(opts.cohesion_strength || 5);
+                document.getElementById('cohesionStrength').value = s;
+                document.getElementById('cohesionStrengthValue').textContent = s;
+              })
+              .catch(() => {});
+        }
+
+        function getCohesionPayload() {
+            return {
+                cohesion_enabled: document.getElementById('cohesionEnabled').checked,
+                cohesion_strength: parseInt(document.getElementById('cohesionStrength').value)
+            };
+        }
+
+        function updateCohesionOptions() {
+            const payload = getCohesionPayload();
+            return fetch('/set_masking_options', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(data => {
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus('Cohesion options updated', 'success');
+                }
+                return data;
+            });
+        }
+
         function useDetailedMasking() {
             const methodSelect = document.getElementById('detailedMaskingMethod');
             const selectedMethod = methodSelect.value;
             
             setStatus('Applying detailed masking...');
             
-            fetch('/use_detailed_masking', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({'method': selectedMethod})
-            })
+            // Ensure cohesion options are up to date before applying
+            updateCohesionOptions().finally(() => {
+                fetch('/use_detailed_masking', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({'method': selectedMethod})
+                })
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -1471,6 +1554,7 @@ if __name__ == '__main__':
             })
             .catch(error => {
                 setStatus('Detailed masking failed: ' + error.message, 'error');
+            });
             });
         }
         

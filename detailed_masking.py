@@ -27,6 +27,14 @@ class DetailedMaskingSystem:
     
     def __init__(self):
         self.debug_mode = True
+        # Masking options with sensible defaults
+        self.options = {
+            'cohesion_enabled': True,
+            'cohesion_strength': 5,           # UI scale 1-10
+            'cohesion_iterations': 5,         # derived from strength
+            'cohesion_color_thr': 14.0,       # derived from strength
+            'cohesion_edge_thr': 22.0         # derived from strength
+        }
         
     def _preprocess_transparency(self, image: np.ndarray) -> np.ndarray:
         """
@@ -310,6 +318,22 @@ class DetailedMaskingSystem:
         
         return refined
         
+    def set_options(self, options: Dict[str, Any]):
+        """Update masking options. Maps cohesion_strength (1-10) to underlying parameters."""
+        if not isinstance(options, dict):
+            return
+        self.options.update({k: v for k, v in options.items() if k in ['cohesion_enabled', 'cohesion_strength', 'cohesion_iterations', 'cohesion_color_thr', 'cohesion_edge_thr']})
+        # Derive parameters from strength if provided
+        s = int(self.options.get('cohesion_strength', 5))
+        s = max(1, min(10, s))
+        # Map strength to iterations and thresholds
+        self.options['cohesion_iterations'] = 2 + s               # 3..12
+        self.options['cohesion_color_thr'] = 9.0 + s * 1.5        # ~10.5..24.0
+        self.options['cohesion_edge_thr'] = 16.0 + s * 1.8        # ~17.8..34.0
+
+    def get_options(self) -> Dict[str, Any]:
+        return dict(self.options)
+
     def bilateral_edge_preserving_mask(self, image: np.ndarray, iterations: int = 3) -> np.ndarray:
         """
         Edge-preserving mask that maintains fine details while smoothing regions
@@ -716,10 +740,17 @@ class DetailedMaskingSystem:
         else:
             final_mask = mask_combined
         
-        # Final object-cohesion refinement to keep near-depth cohesive parts
+        # Final object-cohesion refinement to keep near-depth cohesive parts (toggleable)
         try:
-            final_mask = self.object_cohesion_refinement(processed_image, final_mask, iterations=5,
-                                                         color_thr=14.0, edge_thr=22.0)
+            opts = getattr(self, 'options', {}) or {}
+            if opts.get('cohesion_enabled', True):
+                final_mask = self.object_cohesion_refinement(
+                    processed_image,
+                    final_mask,
+                    iterations=int(opts.get('cohesion_iterations', 5)),
+                    color_thr=float(opts.get('cohesion_color_thr', 14.0)),
+                    edge_thr=float(opts.get('cohesion_edge_thr', 22.0))
+                )
         except Exception as _:
             pass
         
