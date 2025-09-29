@@ -77,7 +77,7 @@ class AdvancedMaskingSystem:
     
     def __init__(self):
         self.deeplab_model = None
-        self.current_method = MaskingMethod.SEMANTIC_DEEPLAB
+        self.current_method = MaskingMethod.WATERSHED
         self.mask_cache = {}
         
     # ---- Transparency and checkerboard preprocessing ----
@@ -262,7 +262,7 @@ class AdvancedMaskingSystem:
         
         # Sure background area
         kernel = np.ones((3, 3), np.uint8)
-        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPENING, kernel, iterations=2)
+        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
         sure_bg = cv2.dilate(opening, kernel, iterations=3)
         
         # Sure foreground area

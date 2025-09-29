@@ -1115,16 +1115,27 @@ if __name__ == '__main__':
             
             <div class="section">
                 <h3>🎭 Masking Method</h3>
-                <select id="maskingMethod" onchange="setMaskingMethod()">
-                    <option value="semantic_deeplab">🧠 AI Segmentation</option>
-                    <option value="edge_based">✂️ Edge Detection</option>
-                    <option value="adaptive_threshold">🌅 Adaptive Threshold</option>
-                    <option value="grabcut">✂️ GrabCut</option>
-                    <option value="watershed">🌊 Watershed</option>
-                    <option value="kmeans_clustering">🎨 K-Means</option>
-                    <option value="combined">✨ Smart Combined</option>
+                <label style="font-size:12px;color:#666;display:block;margin-bottom:6px;">Recommended</label>
+                <select id="maskingMethodSimple" onchange="setMaskingMethod()">
+                    <option value="watershed">🌊 Watershed (Recommended)</option>
                 </select>
-                <div id="maskQuality" class="mask-quality"></div>
+                <div class="checkbox-group" style="margin-top:8px;">
+                    <input type="checkbox" id="maskingExpertToggle" onchange="toggleExpertMasking()">
+                    <label for="maskingExpertToggle" style="margin-bottom:0;">Show expert methods</label>
+                </div>
+                <div id="maskingExpertPanel" style="display:none;margin-top:8px;">
+                    <label style="font-size:12px;color:#666;display:block;margin-bottom:6px;">Expert methods</label>
+                    <select id="maskingMethodExpert" onchange="setMaskingMethod()">
+                        <option value="watershed">🌊 Watershed</option>
+                        <option value="semantic_deeplab">🧠 AI Segmentation</option>
+                        <option value="edge_based">✂️ Edge Detection</option>
+                        <option value="adaptive_threshold">🌅 Adaptive Threshold</option>
+                        <option value="grabcut">✂️ GrabCut</option>
+                        <option value="kmeans_clustering">🎨 K-Means</option>
+                        <option value="combined">✨ Smart Combined</option>
+                    </select>
+                </div>
+                <div id="maskQuality" class="mask-quality" style="margin-top:8px;"></div>
             </div>
             
             <div class="section">
@@ -1423,9 +1434,23 @@ if __name__ == '__main__':
             });
         }
         
+        function toggleExpertMasking() {
+            const panel = document.getElementById('maskingExpertPanel');
+            const chk = document.getElementById('maskingExpertToggle');
+            panel.style.display = chk.checked ? 'block' : 'none';
+        }
+
+        function getSelectedMaskingMethod() {
+            const expert = document.getElementById('maskingExpertToggle').checked;
+            if (expert) {
+                return document.getElementById('maskingMethodExpert').value;
+            } else {
+                return document.getElementById('maskingMethodSimple').value;
+            }
+        }
+
         function setMaskingMethod() {
-            const methodSelect = document.getElementById('maskingMethod');
-            const selectedMethod = methodSelect.value;
+            const selectedMethod = getSelectedMaskingMethod();
             
             setStatus('Updating masking method...');
             
@@ -1457,8 +1482,16 @@ if __name__ == '__main__':
             fetch('/masking_methods')
             .then(response => response.json())
             .then(data => {
-                const select = document.getElementById('maskingMethod');
-                select.value = data.current;
+                // Default to watershed in simple selector
+                const simple = document.getElementById('maskingMethodSimple');
+                if (simple) simple.value = 'watershed';
+                // If current is not watershed, reveal expert and select it
+                if (data.current && data.current !== 'watershed') {
+                    document.getElementById('maskingExpertToggle').checked = true;
+                    toggleExpertMasking();
+                    const expert = document.getElementById('maskingMethodExpert');
+                    if (expert) expert.value = data.current;
+                }
             })
             .catch(error => {
                 console.log('Could not load masking methods:', error);
