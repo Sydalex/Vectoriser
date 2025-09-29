@@ -80,6 +80,83 @@ class AdvancedMaskingSystem:
         self.current_method = MaskingMethod.SEMANTIC_DEEPLAB
         self.mask_cache = {}
         
+    # ---- Transparency and checkerboard preprocessing ----
+    def _remove_checkerboard_pattern(self, image: np.ndarray) -> np.ndarray:
+        # Detect common transparency checkerboard patterns and replace with white
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        patterns = [
+            (cv2.inRange(image, (200, 200, 200), (255, 255, 255)),
+             cv2.inRange(image, (170, 170, 170), (199, 199, 199))),
+            (cv2.inRange(image, (180, 180, 180), (220, 220, 220)),
+             cv2.inRange(image, (150, 150, 150), (179, 179, 179))),
+            (cv2.inRange(image, (192, 192, 192), (255, 255, 255)),
+             cv2.inRange(image, (128, 128, 128), (191, 191, 191))),
+        ]
+        best = None
+        best_ratio = 0
+        for light_mask, dark_mask in patterns:
+            cb = cv2.bitwise_or(light_mask, dark_mask)
+            ratio = float(np.sum(cb > 0)) / (image.shape[0] * image.shape[1])
+            if ratio > best_ratio:
+                best_ratio, best = ratio, cb
+        if best is None or best_ratio <= 0.15:
+            return image
+        # Preserve areas likely to be content
+        edges = cv2.Canny(gray, 30, 100)
+        edge_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        content_edges = cv2.morphologyEx(edges, cv2.MORPH_DILATE, edge_kernel)
+        color_var = np.std(image, axis=2)
+        color_areas = (color_var > 5).astype(np.uint8) * 255
+        actual_content = cv2.bitwise_or(content_edges, color_areas)
+        actual_content = cv2.morphologyEx(actual_content, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+        # Replace checkerboard-only areas with white
+        result = image.copy()
+        replacement = cv2.bitwise_and(best, cv2.bitwise_not(actual_content))
+        result[replacement > 0] = [255, 255, 255]
+        return result
+
+    def _aggressive_checkerboard_removal(self, image: np.ndarray) -> np.ndarray:
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        low_sat = hsv[:, :, 1] < 30
+        L = lab[:, :, 0]
+        light_areas = (L > 120) & (L < 255)
+        potential = (low_sat & light_areas).astype(np.uint8) * 255
+        potential = cv2.morphologyEx(potential, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+        ratio = float(np.sum(potential > 0)) / (image.shape[0] * image.shape[1])
+        if ratio <= 0.1:
+            return image
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 20, 60)
+        content_edges = cv2.morphologyEx(edges, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        color_std = np.std(image.reshape(-1, 3), axis=1).reshape(image.shape[:2])
+        color_content = (color_std > 10).astype(np.uint8) * 255
+        preserve = cv2.bitwise_or(content_edges, color_content)
+        result = image.copy()
+        removal = cv2.bitwise_and(potential, cv2.bitwise_not(preserve))
+        result[removal == 0] = result[removal == 0]
+        result[removal > 0] = [255, 255, 255]
+        return result
+
+    def _preprocess_transparency(self, image: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        # Handle RGBA and remove checkerboard for RGB
+        if len(image.shape) == 3 and image.shape[2] == 4:
+            alpha = image[:, :, 3]
+            white_bg = np.ones_like(image[:, :, :3]) * 255
+            alpha_norm = (alpha.astype(np.float32) / 255.0)[..., None]
+            blended = (image[:, :, :3].astype(np.float32) * alpha_norm + white_bg.astype(np.float32) * (1 - alpha_norm)).astype(np.uint8)
+            return blended, alpha
+        elif len(image.shape) == 3 and image.shape[2] == 3:
+            processed = self._remove_checkerboard_pattern(image)
+            # If still a lot of gray, try aggressive
+            gray_mask = cv2.inRange(processed, (150, 150, 150), (240, 240, 240))
+            ratio = float(np.sum(gray_mask > 0)) / (processed.shape[0] * processed.shape[1])
+            if ratio > 0.2:
+                processed = self._aggressive_checkerboard_removal(processed)
+            return processed, None
+        else:
+            return image, None
+        
     def _load_deeplab_model(self):
         """Lazy load the DeepLabV3 model"""
         if self.deeplab_model is None:
@@ -305,35 +382,44 @@ class AdvancedMaskingSystem:
         return best_mask
     
     def generate_mask(self, image: np.ndarray, method: MaskingMethod = None, **kwargs) -> Dict[str, Any]:
-        """Generate mask using specified method"""
+        """Generate mask using specified method with transparency preprocessing"""
         if method is None:
             method = self.current_method
         
-        # Cache key for performance
-        cache_key = f"{method.value}_{hash(image.data.tobytes())}"
+        # Preprocess image for transparency/checkerboard
+        processed_image, alpha = self._preprocess_transparency(image)
+        
+        # Cache key for performance (use processed image bytes)
+        cache_key = f"{method.value}_{hash(processed_image.data.tobytes())}"
         if cache_key in self.mask_cache:
             return self.mask_cache[cache_key]
         
         try:
+            img = processed_image
             if method == MaskingMethod.SEMANTIC_DEEPLAB:
-                mask = self.semantic_segmentation_mask(image)
+                mask = self.semantic_segmentation_mask(img)
             elif method == MaskingMethod.ADAPTIVE_THRESHOLD:
-                mask = self.adaptive_threshold_mask(image)
+                mask = self.adaptive_threshold_mask(img)
             elif method == MaskingMethod.GRABCUT:
-                mask = self.grabcut_mask(image, **kwargs)
+                mask = self.grabcut_mask(img, **kwargs)
             elif method == MaskingMethod.WATERSHED:
-                mask = self.watershed_mask(image)
+                mask = self.watershed_mask(img)
             elif method == MaskingMethod.EDGE_BASED:
-                mask = self.edge_based_mask(image)
+                mask = self.edge_based_mask(img)
             elif method == MaskingMethod.KMEANS_CLUSTERING:
-                mask = self.kmeans_clustering_mask(image, **kwargs)
+                mask = self.kmeans_clustering_mask(img, **kwargs)
             elif method == MaskingMethod.COMBINED:
-                mask = self.combined_mask(image)
+                mask = self.combined_mask(img)
             else:
-                mask = self.edge_based_mask(image)  # Fallback
+                mask = self.edge_based_mask(img)  # Fallback
             
-            # Calculate quality metrics
-            quality_metrics = MaskQualityMetrics.calculate_metrics(mask, image)
+            # Constrain by alpha if present
+            if alpha is not None:
+                alpha_mask = (alpha > 64).astype(np.uint8) * 255
+                mask = cv2.bitwise_and(mask, alpha_mask)
+            
+            # Calculate quality metrics against processed image
+            quality_metrics = MaskQualityMetrics.calculate_metrics(mask, img)
             
             result = {
                 'mask': mask,

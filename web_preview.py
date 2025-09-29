@@ -735,7 +735,7 @@ def get_detailed_masking_methods():
     
     return jsonify({
         'methods': methods,
-        'current': 'combined'  # Default method
+        'current': 'depth_texture_fusion'  # Default method
     })
 
 @app.route('/use_detailed_masking', methods=['POST'])
@@ -744,8 +744,8 @@ def use_detailed_masking():
     if current_state['image'] is None:
         return jsonify({'error': 'No image loaded'}), 400
     
-    data = request.json
-    method = data.get('method', 'combined')
+    data = request.json or {}
+    method = data.get('method', 'depth_texture_fusion')
     
     try:
         detailed_masking = current_state['detailed_masking_system']
@@ -756,18 +756,29 @@ def use_detailed_masking():
             detailed_masking.set_options(opts)
         
         # Generate detailed mask
-        mask_result = detailed_masking.create_detailed_mask(current_state['image'], method)
+        primary_result = detailed_masking.create_detailed_mask(current_state['image'], method)
+        best_result = primary_result
         
-        # Update current state with detailed mask
-        current_state['mask'] = mask_result['mask']
+        # Quality-based fallback to 'combined' if initial is weak
+        try:
+            quality_threshold = 0.40
+            if best_result.get('quality_score', 0.0) < quality_threshold and method != 'combined':
+                alt = detailed_masking.create_detailed_mask(current_state['image'], 'combined')
+                if alt.get('quality_score', 0.0) > best_result.get('quality_score', 0.0):
+                    best_result = alt
+        except Exception:
+            pass
+        
+        # Update current state with chosen detailed mask
+        current_state['mask'] = best_result['mask']
         current_state['mask_result'] = {
-            'mask': mask_result['mask'],
+            'mask': best_result['mask'],
             'quality_metrics': {
-                'overall_quality': mask_result['quality_score'],
-                'coverage_ratio': mask_result['mask_area_percentage'] / 100,
-                'edge_alignment': mask_result['quality_score'],  # Simplified for now
+                'overall_quality': best_result['quality_score'],
+                'coverage_ratio': best_result['mask_area_percentage'] / 100,
+                'edge_alignment': best_result['quality_score'],  # Simplified for now
             },
-            'method': type('Method', (), {'value': f"detailed_{mask_result['method']}"})()  # Mock method object
+            'method': type('Method', (), {'value': f"detailed_{best_result['method']}"})()  # Mock method object
         }
         
         # Reprocess the pipeline with the new detailed mask
@@ -790,7 +801,7 @@ def use_detailed_masking():
             )
             
             # Regenerate DWG preview with improved masking
-            if current_state['contours']:
+            if current_state['contours'] is not None and len(current_state['contours']) > 0:
                 h, w = current_state['image'].shape[:2]
                 style_manager = current_state['cad_style_manager']
                 
@@ -816,8 +827,8 @@ def use_detailed_masking():
                 current_state['dwg_preview'] = f"data:image/png;base64,{encoded}"
         
         return jsonify({
-            'message': f'Detailed masking applied successfully using {method}',
-            'method': method,
+            'message': 'Detailed masking applied successfully',
+            'method': best_result.get('method', method),
             'quality_score': mask_result['quality_score'],
             'mask_coverage': f"{mask_result['mask_area_percentage']:.1f}%",
             'improved': True
@@ -1217,6 +1228,9 @@ if __name__ == '__main__':
             updateParamValue('minLen');
             updateParamValue('epsilon');
             loadCohesionOptions();
+            // Set default detailed method to depth_texture_fusion
+            const dmSel = document.getElementById('detailedMaskingMethod');
+            if (dmSel) dmSel.value = 'depth_texture_fusion';
             
             // Load CAD profiles and masking methods
             loadCadProfiles();
