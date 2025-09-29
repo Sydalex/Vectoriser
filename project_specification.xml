@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vectoriser_project_specification>
+    <overview>
+        <title>Advanced Character Illustration Vectoriser</title>
+        <description>
+            A sophisticated system for converting detailed character illustrations (PNG images) 
+            into professional CAD-compatible vector formats (DWG) with intelligent masking, 
+            edge detection, and professional styling suitable for technical drawing applications.
+        </description>
+        <primary_goal>
+            Transform hand-drawn character illustrations into clean, scalable vector drawings 
+            while preserving anatomical details, edge quality, and artistic intent.
+        </primary_goal>
+    </overview>
+
+    <technical_requirements>
+        <input_formats>
+            <format type="PNG" priority="primary">
+                <characteristics>
+                    <transparency>Support alpha channel and checkerboard transparency patterns</transparency>
+                    <resolution>Handle high-resolution artwork (300+ DPI)</resolution>
+                    <color_depth>24-bit RGB with alpha channel support</color_depth>
+                </characteristics>
+            </format>
+            <format type="JPEG" priority="secondary">
+                <characteristics>
+                    <background_handling>Automatic white background assumption</background_handling>
+                </characteristics>
+            </format>
+        </input_formats>
+
+        <output_formats>
+            <format type="DWG" priority="primary">
+                <version>AutoCAD 2000+ compatible</version>
+                <features>
+                    <layers>Multiple professional layers with appropriate line weights</layers>
+                    <colors>Industry-standard color codes (ACI)</colors>
+                    <line_types>Continuous lines with varying weights</line_types>
+                    <scalability>Vector-based for infinite scalability</scalability>
+                </features>
+            </format>
+        </output_formats>
+    </technical_requirements>
+
+    <core_functionality>
+        <masking_system>
+            <purpose>Intelligently separate character from background, handling transparency artifacts</purpose>
+            <algorithms>
+                <algorithm name="depth_texture_fusion" priority="highest">
+                    <description>Advanced fusion combining depth awareness and texture analysis</description>
+                    <features>
+                        <depth_cues>Brightness, contrast, edge sharpness, color saturation</depth_cues>
+                        <texture_analysis>Local variance, Gabor filters, directional coherence</texture_analysis>
+                        <adaptive_weighting>Dynamic fusion based on local image characteristics</adaptive_weighting>
+                    </features>
+                    <use_cases>
+                        <case>Detailed character illustrations with complex backgrounds</case>
+                        <case>Images with transparency checkerboard patterns</case>
+                        <case>Artwork with subtle anatomical boundaries</case>
+                    </use_cases>
+                </algorithm>
+                
+                <algorithm name="bilateral_edge_preserving" priority="high">
+                    <description>Edge-preserving smoothing with multi-scale edge detection</description>
+                    <features>
+                        <edge_preservation>Maintains fine detail lines and contours</edge_preservation>
+                        <multi_scale>Fine, medium, and coarse edge detection</multi_scale>
+                        <morphological_cleanup>Connects nearby edges intelligently</morphological_cleanup>
+                    </features>
+                </algorithm>
+                
+                <algorithm name="anatomical_boundary" priority="high">
+                    <description>Specialized for detecting boundaries between body parts and clothing</description>
+                    <features>
+                        <gradient_analysis>Multi-directional gradient detection</gradient_analysis>
+                        <structure_tensor>Oriented boundary detection</structure_tensor>
+                        <coherence_analysis>Local structural coherence measurement</coherence_analysis>
+                    </features>
+                </algorithm>
+                
+                <algorithm name="smart_combined" priority="medium">
+                    <description>Automatically selects best method based on quality metrics</description>
+                    <features>
+                        <quality_assessment>Edge alignment, coverage, compactness evaluation</quality_assessment>
+                        <method_comparison>Tests multiple algorithms and selects optimal result</method_comparison>
+                    </features>
+                </algorithm>
+            </algorithms>
+            
+            <transparency_handling>
+                <checkerboard_detection>
+                    <patterns>
+                        <pattern>Light gray (200-255) and medium gray (170-199) alternating squares</pattern>
+                        <pattern>Photoshop standard (192-255) and (128-191) checkerboard</pattern>
+                        <pattern>Custom transparency indicators with low saturation</pattern>
+                    </patterns>
+                    <removal_strategy>
+                        <step1>Initial pattern detection and removal</step1>
+                        <step2>Aggressive cleanup for stubborn patterns</step2>
+                        <step3>Final content-preserving cleanup</step3>
+                    </removal_strategy>
+                </checkerboard_detection>
+                
+                <alpha_channel_support>
+                    <processing>Blend with white background using proper alpha compositing</processing>
+                    <constraint>Use alpha as additional mask constraint for improved accuracy</constraint>
+                </alpha_channel_support>
+            </transparency_handling>
+        </masking_system>
+
+        <edge_detection>
+            <purpose>Identify character outlines and internal details for vectorization</purpose>
+            <algorithms>
+                <canny_edge_detection>
+                    <parameters>
+                        <low_threshold>Adjustable (default: 50)</low_threshold>
+                        <high_threshold>Adjustable (default: 150)</high_threshold>
+                        <gaussian_blur>Preprocessing blur kernel (default: 5x5)</gaussian_blur>
+                    </parameters>
+                </canny_edge_detection>
+            </algorithms>
+            <post_processing>
+                <morphological_operations>Connect nearby edges, remove noise</morphological_operations>
+                <gap_filling>Intelligent gap closure for broken contours</gap_filling>
+            </post_processing>
+        </edge_detection>
+
+        <vectorization>
+            <purpose>Convert detected edges into smooth vector contours</purpose>
+            <contour_detection>
+                <hierarchy>External and internal contours with parent-child relationships</hierarchy>
+                <filtering>Remove contours below minimum length threshold</filtering>
+            </contour_detection>
+            
+            <curve_fitting>
+                <douglas_peucker>Simplify contours while preserving shape integrity</douglas_peucker>
+                <epsilon_parameter>Adjustable simplification strength (default: 1.5)</epsilon_parameter>
+                <smoothing>Maintain artistic quality while reducing point count</smoothing>
+            </curve_fitting>
+        </vectorization>
+
+        <cad_styling>
+            <purpose>Apply professional CAD styling standards to vector output</purpose>
+            <profiles>
+                <profile name="illustration" default="true">
+                    <description>Clean line art style optimized for character illustrations</description>
+                    <layers>
+                        <layer name="IL-OUTLINE-MAIN" color="7" lineweight="40">Primary character outlines</layer>
+                        <layer name="IL-DETAIL-FINE" color="7" lineweight="15">Fine details and features</layer>
+                        <layer name="IL-PATTERN" color="7" lineweight="12">Patterns and textures</layer>
+                    </layers>
+                    <characteristics>
+                        <line_style>Continuous, clean lines</line_style>
+                        <color_scheme>Monochromatic black on white</color_scheme>
+                        <optimization>Simplified for clarity and printing</optimization>
+                    </characteristics>
+                </profile>
+                
+                <profile name="architectural">
+                    <description>AIA standard architectural drawing conventions</description>
+                    <layers>
+                        <layer name="A-WALL-OTLN" color="1" lineweight="70">Major outlines</layer>
+                        <layer name="A-WALL-PATT" color="8" lineweight="9">Medium details</layer>
+                        <layer name="A-DETL-MLIN" color="7" lineweight="18">Fine details</layer>
+                    </layers>
+                </profile>
+                
+                <profile name="mechanical">
+                    <description>ASME standard mechanical drawing conventions</description>
+                </profile>
+                
+                <profile name="electrical">
+                    <description>IEEE standard electrical schematic conventions</description>
+                </profile>
+            </profiles>
+            
+            <line_classification>
+                <purpose>Automatically classify contours into appropriate CAD layers</purpose>
+                <criteria>
+                    <contour_length>Longer contours typically become main outlines</contour_length>
+                    <hierarchy_level>Parent contours for main features, children for details</hierarchy_level>
+                    <area_ratio>Large enclosed areas indicate primary shapes</area_ratio>
+                </criteria>
+            </line_classification>
+        </cad_styling>
+    </core_functionality>
+
+    <user_interface>
+        <web_preview>
+            <purpose>Real-time preview and parameter adjustment interface</purpose>
+            <features>
+                <live_preview>
+                    <stages>
+                        <stage name="original">Source image display</stage>
+                        <stage name="mask">Generated mask visualization</stage>
+                        <stage name="processed">Masked and preprocessed image</stage>
+                        <stage name="edges">Detected edges overlay</stage>
+                        <stage name="contours">Vectorized contours on original</stage>
+                        <stage name="dwg">Final DWG preview with styling</stage>
+                    </stages>
+                </live_preview>
+                
+                <parameter_controls>
+                    <canny_thresholds>Real-time adjustment of edge detection sensitivity</canny_thresholds>
+                    <contour_filtering>Minimum length and simplification controls</contour_filtering>
+                    <masking_method>Dropdown selection of masking algorithms</masking_method>
+                    <cad_profile>Professional styling profile selection</cad_profile>
+                </parameter_controls>
+                
+                <advanced_masking>
+                    <detailed_methods>
+                        <method name="depth_texture_fusion">🎯 Depth + Texture Fusion (BEST for character illustrations)</method>
+                        <method name="bilateral_edge">🔍 Edge Preserving</method>
+                        <method name="anatomical">🫀 Anatomical Boundary</method>
+                        <method name="depth_aware">🌊 Depth Aware</method>
+                        <method name="texture_aware">🧵 Texture Aware</method>
+                        <method name="combined">✨ Auto-Select Best</method>
+                    </detailed_methods>
+                    <quality_metrics>Real-time quality assessment and coverage statistics</quality_metrics>
+                </advanced_masking>
+                
+                <statistics_panel>
+                    <metrics>
+                        <image_dimensions>Source image size and resolution</image_dimensions>
+                        <mask_coverage>Percentage of image masked as foreground</mask_coverage>
+                        <contour_count>Number of detected vector contours</contour_count>
+                        <line_classifications>Breakdown of contours by CAD layer</line_classifications>
+                        <quality_scores>Masking quality and edge alignment metrics</quality_scores>
+                    </metrics>
+                </statistics_panel>
+            </features>
+            
+            <workflow>
+                <step1>Upload PNG image with character illustration</step1>
+                <step2>System automatically applies best masking method</step2>
+                <step3>User can switch to detailed masking for better results</step3>
+                <step4>Adjust edge detection and vectorization parameters</step4>
+                <step5>Select appropriate CAD styling profile</step5>
+                <step6>Preview final result with white background and black lines</step6>
+                <step7>Download professional DWG file</step7>
+            </workflow>
+        </web_preview>
+    </user_interface>
+
+    <quality_standards>
+        <masking_quality>
+            <edge_alignment>Mask boundaries should align with character edges (target: >70%)</edge_alignment>
+            <coverage>Appropriate foreground coverage without background noise (15-85%)</coverage>
+            <compactness>Smooth, coherent mask boundaries without fragmentation</compactness>
+        </masking_quality>
+        
+        <vectorization_quality>
+            <smoothness>Contours should be smooth without jagged edges</smoothness>
+            <accuracy>Vector paths should closely follow original artwork</accuracy>
+            <simplification>Optimal point reduction while preserving shape integrity</simplification>
+        </vectorization_quality>
+        
+        <output_standards>
+            <compatibility>DWG files compatible with AutoCAD 2000+ and similar CAD software</compatibility>
+            <professional_appearance>Clean, publication-ready line work suitable for technical documentation</professional_appearance>
+            <scalability>Vector output scales cleanly from thumbnail to poster size</scalability>
+        </output_standards>
+    </quality_standards>
+
+    <target_use_cases>
+        <character_design>
+            <scenario>Convert hand-drawn character concept art into clean technical drawings</scenario>
+            <requirements>Preserve anatomical accuracy, clothing details, facial features</requirements>
+        </character_design>
+        
+        <technical_documentation>
+            <scenario>Include character illustrations in technical manuals or specifications</scenario>
+            <requirements>Professional CAD styling, consistent line weights, layer organization</requirements>
+        </technical_documentation>
+        
+        <animation_preparation>
+            <scenario>Create vector references for 2D animation or 3D modeling</scenario>
+            <requirements>Clean outlines, detail preservation, scalable format</requirements>
+        </animation_preparation>
+        
+        <archival_digitization>
+            <scenario>Convert legacy artwork to modern vector formats</scenario>
+            <requirements>High fidelity conversion, transparency handling, quality preservation</requirements>
+        </archival_digitization>
+    </target_use_cases>
+
+    <technical_architecture>
+        <backend>
+            <language>Python 3.13+</language>
+            <frameworks>
+                <framework>Flask - Web application framework</framework>
+                <framework>OpenCV - Computer vision and image processing</framework>
+                <framework>NumPy - Numerical computing</framework>
+                <framework>scikit-learn - Machine learning algorithms</framework>
+                <framework>ezdxf - DWG/DXF file generation</framework>
+                <framework>Matplotlib - Visualization and rendering</framework>
+            </frameworks>
+        </backend>
+        
+        <frontend>
+            <technology>HTML5 + CSS3 + JavaScript</technology>
+            <features>
+                <responsive_design>Works on desktop and tablet devices</responsive_design>
+                <real_time_updates>Live preview updates as parameters change</real_time_updates>
+                <drag_drop_upload>Intuitive image upload interface</drag_drop_upload>
+            </features>
+        </frontend>
+        
+        <processing_pipeline>
+            <stage1 name="image_preprocessing">
+                <transparency_removal>Detect and remove checkerboard patterns</transparency_removal>
+                <alpha_compositing>Blend RGBA images with white background</alpha_compositing>
+                <noise_reduction>Optional Gaussian blur for noise reduction</noise_reduction>
+            </stage1>
+            
+            <stage2 name="intelligent_masking">
+                <method_selection>Choose optimal masking algorithm based on image characteristics</method_selection>
+                <quality_assessment>Evaluate mask quality using multiple metrics</quality_assessment>
+                <refinement>Apply alpha channel constraints and morphological cleanup</refinement>
+            </stage2>
+            
+            <stage3 name="edge_detection">
+                <canny_processing>Multi-threshold edge detection</canny_processing>
+                <morphological_processing>Edge connection and gap filling</morphological_processing>
+                <noise_filtering>Remove spurious edges and artifacts</noise_filtering>
+            </stage3>
+            
+            <stage4 name="vectorization">
+                <contour_extraction>Find hierarchical contour structure</contour_extraction>
+                <simplification>Douglas-Peucker curve fitting</simplification>
+                <smoothing>Bezier curve approximation for smooth paths</smoothing>
+            </stage4>
+            
+            <stage5 name="cad_styling">
+                <classification>Assign contours to appropriate CAD layers</classification>
+                <styling>Apply professional line weights and colors</styling>
+                <optimization>Organize layers for CAD software compatibility</optimization>
+            </stage5>
+            
+            <stage6 name="dwg_generation">
+                <file_creation>Generate AutoCAD-compatible DWG file</file_creation>
+                <metadata>Include proper layer definitions and drawing units</metadata>
+                <validation>Ensure file integrity and CAD software compatibility</validation>
+            </stage6>
+        </processing_pipeline>
+    </technical_architecture>
+
+    <performance_requirements>
+        <processing_time>
+            <target>Complete processing under 30 seconds for typical images (2000x2000 px)</target>
+            <acceptable>Up to 60 seconds for complex, high-resolution images (4000x4000 px)</acceptable>
+        </processing_time>
+        
+        <memory_usage>
+            <peak>Maximum 2GB RAM usage during processing</peak>
+            <efficient>Streaming processing for very large images when possible</efficient>
+        </memory_usage>
+        
+        <accuracy>
+            <masking>90%+ accuracy in separating character from background</masking>
+            <vectorization>95%+ fidelity to original artwork contours</vectorization>
+        </accuracy>
+    </performance_requirements>
+
+    <deployment>
+        <local_development>
+            <environment>MacOS with Python 3.13 virtual environment</environment>
+            <server>Flask development server on localhost:3000</server>
+            <debugging>Full debug mode with detailed logging</debugging>
+        </local_development>
+        
+        <production_readiness>
+            <scalability>Support for concurrent user sessions</scalability>
+            <security>Input validation and safe file handling</security>
+            <monitoring>Processing statistics and error logging</monitoring>
+        </production_readiness>
+    </deployment>
+
+    <future_enhancements>
+        <ai_integration>
+            <deep_learning>Advanced neural networks for character detection</deep_learning>
+            <style_transfer>Automatic style adaptation based on input artwork</style_transfer>
+        </ai_integration>
+        
+        <format_support>
+            <svg_output>Scalable Vector Graphics for web use</svg_output>
+            <pdf_export>Direct PDF generation for documentation</pdf_export>
+            <batch_processing>Multiple image processing workflows</batch_processing>
+        </format_support>
+        
+        <advanced_features>
+            <color_preservation>Maintain original colors in vector output</color_preservation>
+            <layer_detection>Automatic separation of clothing, hair, skin layers</layer_detection>
+            <pose_analysis>Understanding of character anatomy and proportions</pose_analysis>
+        </advanced_features>
+    </future_enhancements>
+</vectoriser_project_specification>

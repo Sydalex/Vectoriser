@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vectoriser Live Preview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: white;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .preview-area {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .preview-image {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 4px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .section {
+            background: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            border: 1px solid #eee;
+        }
+        
+        .section h3 {
+            margin-bottom: 10px;
+            color: #555;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .param-group {
+            margin-bottom: 15px;
+        }
+        
+        .param-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #666;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        .param-value {
+            font-size: 12px;
+            color: #888;
+            text-align: right;
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 4px;
+            background: #007AFF;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #0056CC;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .stage-button {
+            background: #6C757D;
+            margin: 2px 0;
+            padding: 8px;
+            font-size: 12px;
+        }
+        
+        .stage-button:hover {
+            background: #5A6268;
+        }
+        
+        .stage-button.active {
+            background: #28A745;
+        }
+        
+        .stats {
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .stats div {
+            margin-bottom: 4px;
+            padding: 2px 0;
+        }
+        
+        .status {
+            padding: 10px;
+            background: #e3f2fd;
+            color: #1976d2;
+            text-align: center;
+            font-size: 14px;
+            border-radius: 4px;
+            margin: 20px;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        #auto-update {
+            width: auto;
+            margin-right: 10px;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        
+        .mask-quality {
+            font-size: 11px;
+            padding: 4px 8px;
+            margin-top: 5px;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        .quality-excellent {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .quality-good {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .quality-poor {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1 style="font-size: 18px; margin-bottom: 20px; color: #333;">Vectoriser Preview</h1>
+            
+            <div class="section">
+                <h3>File Operations</h3>
+                <input type="file" id="imageInput" accept="image/*">
+                <button onclick="processCurrent()">Process Image</button>
+                <button onclick="saveDWG()">Save DWG</button>
+            </div>
+            
+            <div class="section">
+                <h3>🎨 CAD Style Profile</h3>
+                <select id="cadProfile" onchange="setCadProfile()">
+                    <option value="illustration">✏️ Illustration Style</option>
+                    <option value="architectural">🏗️ Architectural (AIA)</option>
+                    <option value="mechanical">⚙️ Mechanical (ASME)</option>
+                    <option value="electrical">⚡ Electrical (IEEE)</option>
+                </select>
+            </div>
+            
+            <div class="section">
+                <h3>🎭 Masking Method</h3>
+                <select id="maskingMethod" onchange="setMaskingMethod()">
+                    <option value="semantic_deeplab">🧠 AI Segmentation</option>
+                    <option value="edge_based">✂️ Edge Detection</option>
+                    <option value="adaptive_threshold">🌅 Adaptive Threshold</option>
+                    <option value="grabcut">✂️ GrabCut</option>
+                    <option value="watershed">🌊 Watershed</option>
+                    <option value="kmeans_clustering">🎨 K-Means</option>
+                    <option value="combined">✨ Smart Combined</option>
+                </select>
+                <div id="maskQuality" class="mask-quality"></div>
+            </div>
+            
+            <div class="section">
+                <h3>🎯 Detailed Illustration Masking</h3>
+                <p style="font-size: 11px; color: #666; margin-bottom: 10px;">For detailed character illustrations requiring fine edge preservation and anatomical boundaries.</p>
+                <select id="detailedMaskingMethod">
+                    <option value="depth_texture_fusion">🎯 Depth + Texture Fusion (BEST)</option>
+                    <option value="combined">✨ Auto-Select Best</option>
+                    <option value="bilateral_edge">🔍 Edge Preserving</option>
+                    <option value="anatomical">🫀 Anatomical Boundary</option>
+                    <option value="depth_aware">🌊 Depth Aware</option>
+                    <option value="texture_aware">🧵 Texture Aware</option>
+                    <option value="mean_shift">🎨 Mean Shift</option>
+                </select>
+                <button onclick="useDetailedMasking()" style="margin-top: 10px; background: #FF6B35;">🎯 Apply Detailed Masking</button>
+                <div id="detailedMaskResult" class="mask-quality" style="margin-top: 10px;"></div>
+            </div>
+            
+            <div class="section">
+                <h3>Processing Parameters</h3>
+                <div class="param-group">
+                    <label>Canny Low Threshold</label>
+                    <input type="range" id="cannyLow" min="10" max="200" value="50" oninput="updateParamValue('cannyLow')">
+                    <div class="param-value" id="cannyLowValue">50</div>
+                </div>
+                
+                <div class="param-group">
+                    <label>Canny High Threshold</label>
+                    <input type="range" id="cannyHigh" min="50" max="400" value="150" oninput="updateParamValue('cannyHigh')">
+                    <div class="param-value" id="cannyHighValue">150</div>
+                </div>
+                
+                <div class="param-group">
+                    <label>Min Contour Length</label>
+                    <input type="range" id="minLen" min="5" max="100" value="25" oninput="updateParamValue('minLen')">
+                    <div class="param-value" id="minLenValue">25</div>
+                </div>
+                
+                <div class="param-group">
+                    <label>Epsilon (Simplification)</label>
+                    <input type="range" id="epsilon" min="0.1" max="10" step="0.1" value="1.5" oninput="updateParamValue('epsilon')">
+                    <div class="param-value" id="epsilonValue">1.5</div>
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="auto-update" checked>
+                    <label for="auto-update" style="margin-bottom: 0;">Auto Update</label>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>Processing Stages</h3>
+                <button class="stage-button" onclick="showStage('original')">Original</button>
+                <button class="stage-button" onclick="showStage('mask')">Mask</button>
+                <button class="stage-button" onclick="showStage('processed')">Processed</button>
+                <button class="stage-button" onclick="showStage('edges')">Edges</button>
+                <button class="stage-button" onclick="showStage('contours')">Contours</button>
+                <button class="stage-button" onclick="showStage('dwg')" style="background: #FF6B35;">⚪⚫ Vector Output</button>
+            </div>
+            
+            <div class="section">
+                <h3>Statistics</h3>
+                <div class="stats" id="stats">
+                    Load an image to see statistics
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="status" id="status">Ready - Upload an image to start</div>
+            <div class="preview-area" id="previewArea">
+                <div style="text-align: center; color: #888;">
+                    <h3>Upload an image to begin</h3>
+                    <p>Select an image file and click "Process Image" to see the vectorization stages</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStage = 'original';
+        let autoUpdateTimer = null;
+        let isProcessing = false;
+        
+        // Initialize parameter value displays
+        document.addEventListener('DOMContentLoaded', function() {
+            updateParamValue('cannyLow');
+            updateParamValue('cannyHigh');
+            updateParamValue('minLen');
+            updateParamValue('epsilon');
+            
+            // Load CAD profiles and masking methods
+            loadCadProfiles();
+            loadMaskingMethods();
+            
+            // Add parameter change listeners for auto-update
+            ['cannyLow', 'cannyHigh', 'minLen', 'epsilon'].forEach(param => {
+                document.getElementById(param).addEventListener('input', () => {
+                    if (document.getElementById('auto-update').checked) {
+                        scheduleAutoUpdate();
+                    }
+                });
+            });
+        });
+        
+        function updateParamValue(paramId) {
+            const slider = document.getElementById(paramId);
+            const valueDiv = document.getElementById(paramId + 'Value');
+            valueDiv.textContent = slider.value;
+        }
+        
+        function scheduleAutoUpdate() {
+            if (autoUpdateTimer) {
+                clearTimeout(autoUpdateTimer);
+            }
+            autoUpdateTimer = setTimeout(() => {
+                if (!isProcessing) {
+                    processCurrent();
+                }
+            }, 500);
+        }
+        
+        function setStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (type === 'error' ? 'error' : type === 'success' ? 'success' : '');
+        }
+        
+        // Handle file upload
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            setStatus('Uploading image...');
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus(`Uploaded: ${data.filename} (${data.size})`, 'success');
+                    showStage('original');
+                }
+            })
+            .catch(error => {
+                setStatus('Upload failed: ' + error.message, 'error');
+            });
+        });
+        
+        function processCurrent() {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            setStatus('Processing image...');
+            
+            const params = {
+                canny_low: parseInt(document.getElementById('cannyLow').value),
+                canny_high: parseInt(document.getElementById('cannyHigh').value),
+                min_len: parseInt(document.getElementById('minLen').value),
+                epsilon: parseFloat(document.getElementById('epsilon').value)
+            };
+            
+            fetch('/process', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params)
+            })
+            .then(response => response.json())
+            .then(data => {
+                isProcessing = false;
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus('Processing completed', 'success');
+                    updateStats();
+                    showStage(currentStage); // Refresh current view
+                }
+            })
+            .catch(error => {
+                isProcessing = false;
+                setStatus('Processing failed: ' + error.message, 'error');
+            });
+        }
+        
+        function showStage(stage) {
+            currentStage = stage;
+            
+            // Update button states
+            document.querySelectorAll('.stage-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event?.target?.classList.add('active');
+            
+            fetch(`/preview/${stage}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('previewArea').innerHTML = 
+                        `<div style="text-align: center; color: #888;">
+                            <h3>Stage: ${stage}</h3>
+                            <p>${data.error}</p>
+                        </div>`;
+                } else {
+                    document.getElementById('previewArea').innerHTML = 
+                        `<img src="${data.image}" alt="${stage}" class="preview-image">`;
+                }
+            })
+            .catch(error => {
+                document.getElementById('previewArea').innerHTML = 
+                    `<div style="text-align: center; color: #f44;">
+                        <h3>Error loading ${stage}</h3>
+                        <p>${error.message}</p>
+                    </div>`;
+            });
+        }
+        
+        function updateStats() {
+            fetch('/stats')
+            .then(response => response.json())
+            .then(stats => {
+                let statsHTML = '';
+                Object.keys(stats).forEach(key => {
+                    const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    statsHTML += `<div><strong>${label}:</strong> ${stats[key]}</div>`;
+                });
+                
+                if (statsHTML === '') {
+                    statsHTML = 'No statistics available';
+                }
+                
+                document.getElementById('stats').innerHTML = statsHTML;
+            });
+        }
+        
+        function setCadProfile() {
+            const profileSelect = document.getElementById('cadProfile');
+            const selectedProfile = profileSelect.value;
+            
+            setStatus('Updating CAD profile...');
+            
+            fetch('/set_cad_profile', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({'profile': selectedProfile})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus('CAD profile updated: ' + data.profile, 'success');
+                    updateStats();
+                    // Refresh DWG preview if available
+                    if (currentStage === 'dwg') {
+                        showStage('dwg');
+                    }
+                }
+            })
+            .catch(error => {
+                setStatus('Profile update failed: ' + error.message, 'error');
+            });
+        }
+        
+        function loadCadProfiles() {
+            fetch('/cad_profiles')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('cadProfile');
+                select.value = data.current;
+            })
+            .catch(error => {
+                console.log('Could not load CAD profiles:', error);
+            });
+        }
+        
+        function setMaskingMethod() {
+            const methodSelect = document.getElementById('maskingMethod');
+            const selectedMethod = methodSelect.value;
+            
+            setStatus('Updating masking method...');
+            
+            fetch('/set_masking_method', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({'method': selectedMethod})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus('Masking method updated: ' + selectedMethod, 'success');
+                    updateStats();
+                    updateMaskQuality(data.quality);
+                    // Refresh current view
+                    if (['mask', 'processed', 'edges', 'contours', 'dwg'].includes(currentStage)) {
+                        showStage(currentStage);
+                    }
+                }
+            })
+            .catch(error => {
+                setStatus('Masking method update failed: ' + error.message, 'error');
+            });
+        }
+        
+        function loadMaskingMethods() {
+            fetch('/masking_methods')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('maskingMethod');
+                select.value = data.current;
+            })
+            .catch(error => {
+                console.log('Could not load masking methods:', error);
+            });
+        }
+        
+        function updateMaskQuality(quality) {
+            const qualityDiv = document.getElementById('maskQuality');
+            if (quality !== null && quality !== undefined) {
+                let qualityClass = 'quality-poor';
+                let qualityText = 'Poor';
+                
+                if (quality > 0.7) {
+                    qualityClass = 'quality-excellent';
+                    qualityText = 'Excellent';
+                } else if (quality > 0.4) {
+                    qualityClass = 'quality-good';
+                    qualityText = 'Good';
+                }
+                
+                qualityDiv.className = 'mask-quality ' + qualityClass;
+                qualityDiv.textContent = `Quality: ${qualityText} (${(quality * 100).toFixed(0)}%)`;
+            } else {
+                qualityDiv.className = 'mask-quality';
+                qualityDiv.textContent = '';
+            }
+        }
+        
+        function useDetailedMasking() {
+            const methodSelect = document.getElementById('detailedMaskingMethod');
+            const selectedMethod = methodSelect.value;
+            
+            setStatus('Applying detailed masking...');
+            
+            fetch('/use_detailed_masking', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({'method': selectedMethod})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                } else {
+                    setStatus('Detailed masking applied successfully!', 'success');
+                    
+                    // Update detailed mask result display
+                    const resultDiv = document.getElementById('detailedMaskResult');
+                    let qualityClass = 'quality-poor';
+                    if (data.quality_score > 0.7) {
+                        qualityClass = 'quality-excellent';
+                    } else if (data.quality_score > 0.4) {
+                        qualityClass = 'quality-good';
+                    }
+                    
+                    resultDiv.className = 'mask-quality ' + qualityClass;
+                    resultDiv.innerHTML = `
+                        <div><strong>Method:</strong> ${data.method}</div>
+                        <div><strong>Quality:</strong> ${(data.quality_score * 100).toFixed(0)}%</div>
+                        <div><strong>Coverage:</strong> ${data.mask_coverage}</div>
+                        ${data.improved ? '<div style="color: #28a745;">✓ Improved masking applied</div>' : ''}
+                    `;
+                    
+                    updateStats();
+                    // Refresh current view to show improved results
+                    if (['mask', 'processed', 'edges', 'contours', 'dwg'].includes(currentStage)) {
+                        showStage(currentStage);
+                    }
+                }
+            })
+            .catch(error => {
+                setStatus('Detailed masking failed: ' + error.message, 'error');
+            });
+        }
+        
+        function saveDWG() {
+            setStatus('Saving DWG file...');
+            
+            fetch('/save_dwg', {method: 'POST'})
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Save failed');
+                    });
+                }
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'vectorized.dwg';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                setStatus('DWG file saved successfully', 'success');
+            })
+            .catch(error => {
+                setStatus('Save failed: ' + error.message, 'error');
+            });
+        }
+    </script>
+</body>
+</html>

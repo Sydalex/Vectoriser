@@ -1,35 +1,72 @@
-# Image to DWG Converter
+# Advanced Character Illustration Vectoriser
 
-A Python script that converts raster images to DWG files using semantic segmentation and contour vectorization. This tool isolates the main subject from the background using a pre-trained DeepLabV3 model, vectorizes its contours, and saves the result as a layered CAD file.
+A sophisticated system for converting detailed character illustrations (PNG images) into professional CAD-compatible vector formats (DWG) with intelligent masking, edge detection, and professional styling suitable for technical drawing applications.
 
-## Features
+![Vectoriser Preview](https://img.shields.io/badge/status-active-brightgreen) ![Python](https://img.shields.io/badge/python-3.13+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
-- **Semantic Segmentation**: Uses DeepLabV3 with ResNet101 backbone for accurate object isolation
-- **Edge Detection**: Canny edge detection with configurable thresholds
-- **Contour Vectorization**: Ramer-Douglas-Peucker algorithm for contour simplification
-- **Layered Output**: Separates primary outlines from detail lines in the DWG file
-- **Command-Line Interface**: Easy to use with configurable parameters
+## 🎯 Project Overview
 
-## Installation
+Transform hand-drawn character illustrations into clean, scalable vector drawings while preserving anatomical details, edge quality, and artistic intent. Perfect for character design, technical documentation, animation preparation, and archival digitization.
+
+## ✨ Key Features
+
+### 🔍 Advanced Masking System
+- **Depth-Texture Fusion**: Revolutionary algorithm combining depth awareness with texture analysis
+- **Transparency Handling**: Sophisticated detection and removal of checkerboard patterns
+- **Alpha Channel Support**: Proper RGBA compositing and constraint-based refinement
+- **Anatomical Boundary Detection**: Specialized for character illustrations with body part boundaries
+
+### 🎨 Professional CAD Styling
+- **Multiple Industry Profiles**: Illustration, Architectural (AIA), Mechanical (ASME), Electrical (IEEE)
+- **Intelligent Layer Classification**: Automatic assignment to appropriate CAD layers
+- **Professional Line Weights**: Industry-standard line weights and colors
+- **AutoCAD Compatibility**: DWG files compatible with AutoCAD 2000+ and similar software
+
+### 🖥️ Real-Time Web Interface
+- **Live Preview**: Multi-stage visualization (original → mask → edges → contours → DWG)
+- **Parameter Controls**: Real-time adjustment of all processing parameters
+- **Quality Metrics**: Instant feedback on masking quality and coverage statistics
+- **Professional Workflow**: Upload → Process → Style → Preview → Download
+
+## 🚀 Quick Start
 
 ### Prerequisites
+- Python 3.13+
+- Virtual environment (recommended)
 
-- Python 3.9 or higher
-- pip package manager
-
-### Install Dependencies
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/[your-username]/vectoriser.git
+cd vectoriser
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On macOS/Linux
+# or
+venv\Scripts\activate  # On Windows
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Dependencies
+### Usage
 
-- **opencv-python**: Core image processing operations
-- **numpy**: Numerical array operations  
-- **torch**: Deep learning framework for model inference
-- **torchvision**: Pre-trained segmentation models
-- **ezdxf**: DWG/DXF file creation and manipulation
+1. **Start the web interface**:
+   ```bash
+   python web_preview.py
+   ```
+
+2. **Open your browser** to `http://localhost:3000`
+
+3. **Upload a character illustration** (PNG recommended for best results)
+
+4. **Process with standard masking** or use **Advanced Detailed Masking** for better results
+
+5. **Adjust parameters** as needed and select appropriate CAD styling profile
+
+6. **Download your professional DWG file**
 
 ## Usage
 
