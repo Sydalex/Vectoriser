@@ -89,7 +89,7 @@ def image_to_base64(image, format='PNG'):
 
 def create_contour_visualization(image, contours):
     """Create a visualization of contours overlaid on the original image"""
-    if image is None or not contours:
+    if image is None or contours is None or len(contours) == 0:
         return None
     
     contour_image = image.copy()
@@ -132,13 +132,11 @@ def calculate_stats():
             edge_pixels = int(np.sum(current_state['edges'] > 0))
             stats['edge_pixels'] = edge_pixels
         
-        if current_state['contours'] is not None:
+        if current_state['contours'] is not None and len(current_state['contours']) > 0:
             stats['contour_count'] = len(current_state['contours'])
-            
-            if current_state['contours']:
-                areas = [cv2.contourArea(c) for c in current_state['contours']]
-                stats['primary_area'] = f"{max(areas):.0f}"
-                stats['total_points'] = int(sum(len(c) for c in current_state['contours']))
+            areas = [cv2.contourArea(c) for c in current_state['contours']]
+            stats['primary_area'] = f"{max(areas):.0f}"
+            stats['total_points'] = int(sum(len(c) for c in current_state['contours']))
     
     current_state['stats'] = stats
     return stats
@@ -414,7 +412,7 @@ def process_image():
         
         # Generate styled DWG preview
         try:
-            if current_state['contours']:
+            if current_state['contours'] is not None and len(current_state['contours']) > 0:
                 # Create temporary DWG file using CAD style manager
                 with tempfile.NamedTemporaryFile(suffix='.dwg', delete=False) as tmp:
                     temp_dwg_path = tmp.name
@@ -546,7 +544,7 @@ def set_cad_profile():
         style_manager.set_profile(data['profile'])
         
         # Regenerate DWG preview with new style if we have contours
-        if current_state['contours']:
+        if current_state['contours'] is not None and len(current_state['contours']) > 0:
             # Re-process with new styling
             h, w = current_state['image'].shape[:2]
             
@@ -572,6 +570,10 @@ def set_cad_profile():
             dwg_image_data = render_dwg_to_image(temp_dwg_path, use_styling=True)
             encoded = base64.b64encode(dwg_image_data).decode('utf-8')
             current_state['dwg_preview'] = f"data:image/png;base64,{encoded}"
+        else:
+            current_state['styled_contours'] = None
+            current_state['dwg_path'] = None
+            current_state['dwg_preview'] = None
         
         return jsonify({
             'message': 'Profile updated successfully',
@@ -630,23 +632,28 @@ def set_masking_method():
                     current_state['edges'], config
                 )
                 
-                # Regenerate DWG preview
-                h, w = current_state['image'].shape[:2]
-                style_manager = current_state['cad_style_manager']
-                
-                with tempfile.NamedTemporaryFile(suffix='.dwg', delete=False) as tmp:
-                    temp_dwg_path = tmp.name
-                
-                styled_contours = style_manager.create_styled_dwg(
-                    current_state['contours'], temp_dwg_path, w, h
-                )
-                current_state['styled_contours'] = styled_contours
-                current_state['dwg_path'] = temp_dwg_path
-                
-                # Update DWG preview
-                dwg_image_data = render_dwg_to_image(temp_dwg_path, use_styling=True)
-                encoded = base64.b64encode(dwg_image_data).decode('utf-8')
-                current_state['dwg_preview'] = f"data:image/png;base64,{encoded}"
+                # Regenerate DWG preview if we have contours
+                if current_state['contours'] is not None and len(current_state['contours']) > 0:
+                    h, w = current_state['image'].shape[:2]
+                    style_manager = current_state['cad_style_manager']
+                    
+                    with tempfile.NamedTemporaryFile(suffix='.dwg', delete=False) as tmp:
+                        temp_dwg_path = tmp.name
+                    
+                    styled_contours = style_manager.create_styled_dwg(
+                        current_state['contours'], temp_dwg_path, w, h
+                    )
+                    current_state['styled_contours'] = styled_contours
+                    current_state['dwg_path'] = temp_dwg_path
+                    
+                    # Update DWG preview
+                    dwg_image_data = render_dwg_to_image(temp_dwg_path, use_styling=True)
+                    encoded = base64.b64encode(dwg_image_data).decode('utf-8')
+                    current_state['dwg_preview'] = f"data:image/png;base64,{encoded}"
+                else:
+                    current_state['styled_contours'] = None
+                    current_state['dwg_path'] = None
+                    current_state['dwg_preview'] = None
         
         return jsonify({
             'message': 'Masking method updated successfully',
