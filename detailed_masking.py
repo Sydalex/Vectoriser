@@ -236,6 +236,79 @@ class DetailedMaskingSystem:
         result[preserve_mask == 0] = [255, 255, 255]
         
         return result
+
+    def object_cohesion_refinement(self, image: np.ndarray, mask: np.ndarray, iterations: int = 4,
+                                   color_thr: float = 14.0, edge_thr: float = 20.0) -> np.ndarray:
+        """
+        Expand/refine the object mask to keep cohesive parts that are near in depth but may have been
+        cut off by depth weighting. Uses color similarity in LAB space, edge-aware constraints, and
+        iterative connectivity-based growth from the largest connected component.
+        """
+        if mask is None or image is None:
+            return mask
+        
+        # Ensure mask is binary uint8 {0,255}
+        m = (mask > 0).astype(np.uint8) * 255
+        if np.sum(m) == 0:
+            return m
+        
+        # Find largest connected component as the object core
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(m)
+        if num_labels <= 1:
+            core = m.copy()
+        else:
+            largest_label = np.argmax(stats[1:, cv2.CC_STAT_AREA]) + 1
+            core = ((labels == largest_label).astype(np.uint8)) * 255
+        
+        # Prepare color space and edges
+        if len(image.shape) == 3:
+            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image.copy()
+            lab = cv2.cvtColor(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR), cv2.COLOR_BGR2LAB)
+        
+        L, A, B = lab[:, :, 0].astype(np.float32), lab[:, :, 1].astype(np.float32), lab[:, :, 2].astype(np.float32)
+        core_inds = core > 0
+        if np.sum(core_inds) == 0:
+            return m
+        Lm, Am, Bm = np.mean(L[core_inds]), np.mean(A[core_inds]), np.mean(B[core_inds])
+        
+        # Precompute color distance map (LAB Euclidean)
+        color_dist = np.sqrt((L - Lm) ** 2 + (A - Am) ** 2 + (B - Bm) ** 2)
+        
+        # Edge map to avoid crossing strong boundaries
+        edges = cv2.Canny(gray, 80, 200)
+        edges_blur = cv2.GaussianBlur(edges.astype(np.float32), (5, 5), 0)
+        
+        current = core.copy()
+        se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        thr = float(color_thr)
+        for _ in range(max(1, iterations)):
+            # Candidate ring: immediate neighbors
+            dil = cv2.dilate(current, se)
+            ring = cv2.bitwise_and(dil, cv2.bitwise_not(current))
+            ring_bool = ring > 0
+            if not np.any(ring_bool):
+                break
+            
+            # Accept candidates similar in color and not across strong edges
+            accept = (color_dist <= thr) & (edges_blur <= edge_thr) & ring_bool
+            if not np.any(accept):
+                # relax threshold slightly
+                thr += 2.0
+                continue
+            
+            current[accept] = 255
+            # Gradually relax
+            thr = min(thr + 1.0, color_thr + 6.0)
+        
+        # Fill small holes and smooth
+        filled = ndimage.binary_fill_holes(current > 0).astype(np.uint8) * 255
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        refined = cv2.morphologyEx(filled, cv2.MORPH_CLOSE, kernel_close)
+        
+        return refined
         
     def bilateral_edge_preserving_mask(self, image: np.ndarray, iterations: int = 3) -> np.ndarray:
         """
@@ -642,6 +715,13 @@ class DetailedMaskingSystem:
             final_mask = (labels == largest_label).astype(np.uint8) * 255
         else:
             final_mask = mask_combined
+        
+        # Final object-cohesion refinement to keep near-depth cohesive parts
+        try:
+            final_mask = self.object_cohesion_refinement(processed_image, final_mask, iterations=5,
+                                                         color_thr=14.0, edge_thr=22.0)
+        except Exception as _:
+            pass
         
         return final_mask
     
