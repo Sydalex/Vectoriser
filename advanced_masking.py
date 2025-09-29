@@ -226,14 +226,26 @@ class AdvancedMaskingSystem:
         
         return mask
     
-    def grabcut_mask(self, image: np.ndarray, iterations: int = 5) -> np.ndarray:
-        """GrabCut algorithm for foreground extraction"""
+    def grabcut_mask(self, image: np.ndarray, iterations: int = 5, margin_ratio: float = 0.01) -> np.ndarray:
+        """GrabCut algorithm for foreground extraction with near-full-image initialization.
+        margin_ratio controls the border margin (default 1% per side).
+        """
         h, w = image.shape[:2]
         
-        # Create initial rectangle (assume object is in center 60% of image)
-        margin_x = int(w * 0.2)
-        margin_y = int(h * 0.2)
-        rect = (margin_x, margin_y, w - 2*margin_x, h - 2*margin_y)
+        # Large rectangle covering almost the whole image
+        mr = max(0.0, min(0.2, float(margin_ratio)))
+        margin_x = max(1, int(round(w * mr)))
+        margin_y = max(1, int(round(h * mr)))
+        rect_w = max(1, w - 2 * margin_x)
+        rect_h = max(1, h - 2 * margin_y)
+        rect_x = min(margin_x, w - 1)
+        rect_y = min(margin_y, h - 1)
+        # Ensure the rect fits within the image
+        if rect_x + rect_w > w:
+            rect_w = w - rect_x
+        if rect_y + rect_h > h:
+            rect_h = h - rect_y
+        rect = (rect_x, rect_y, rect_w, rect_h)
         
         # Initialize GrabCut
         mask = np.zeros((h, w), np.uint8)
@@ -241,15 +253,16 @@ class AdvancedMaskingSystem:
         fgd_model = np.zeros((1, 65), np.float64)
         
         # Apply GrabCut
-        cv2.grabCut(image, mask, rect, bgd_model, fgd_model, iterations, cv2.GC_INIT_WITH_RECT)
+        cv2.grabCut(image, mask, rect, bgd_model, fgd_model, int(max(1, iterations)), cv2.GC_INIT_WITH_RECT)
         
         # Create binary mask
-        mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
-        result_mask = mask2 * 255
+        mask2 = np.where((mask == cv2.GC_BGD) | (mask == cv2.GC_PR_BGD), 0, 1).astype('uint8')
+        result_mask = (mask2 * 255).astype(np.uint8)
         
         # Post-processing
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         result_mask = cv2.morphologyEx(result_mask, cv2.MORPH_CLOSE, kernel)
+        result_mask = cv2.morphologyEx(result_mask, cv2.MORPH_OPEN, kernel)
         
         return result_mask
     
